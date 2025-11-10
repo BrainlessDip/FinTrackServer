@@ -1,0 +1,4 @@
+/.env
+/.vscode
+/fintrack_firebasesdk.json
+/node_modules
