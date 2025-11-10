@@ -137,6 +137,30 @@ async function run() {
       res.send(userTransactions);
     });
 
+    app.delete(
+      "/my-transactions/:id",
+      verifyFirebaseToken,
+      async (req, res) => {
+        const email = req.user.email;
+        const id = req.params.id;
+        const transaction = await costsCollection.deleteOne({
+          email,
+          _id: new ObjectId(id),
+        });
+        if (transaction.deletedCount > 0) {
+          return res.status(200).send({
+            success: true,
+            message: "Transaction deleted successfully.",
+          });
+        } else {
+          return res.status(404).send({
+            success: false,
+            message: "Transaction not found",
+          });
+        }
+      }
+    );
+
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!"
     );
