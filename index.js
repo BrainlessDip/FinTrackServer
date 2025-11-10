@@ -75,8 +75,9 @@ async function run() {
 
     app.post("/add-transaction", verifyFirebaseToken, async (req, res) => {
       try {
-        const { type, category, amount, description, date, name } = req.body;
+        const { type, category, amount, description, date } = req.body;
         const email = req.user.email;
+        const name = req.user.name;
 
         if (!type || !["income", "expense"].includes(type)) {
           return res.status(400).send({ error: "Invalid type" });
@@ -128,6 +129,12 @@ async function run() {
       const email = req.user.email;
       const user = await usersCollection.findOne({ email });
       res.send(user);
+    });
+
+    app.get("/my-transactions", verifyFirebaseToken, async (req, res) => {
+      const email = req.user.email;
+      const userTransactions = await costsCollection.find({ email }).toArray();
+      res.send(userTransactions);
     });
 
     console.log(
