@@ -125,6 +125,55 @@ async function run() {
       }
     });
 
+    app.patch(
+      "/update-transaction/:id",
+      verifyFirebaseToken,
+      async (req, res) => {
+        try {
+          const { type, category, amount, description, date } = req.body;
+          const email = req.user.email;
+          const name = req.user.name;
+
+          if (!type || !["income", "expense"].includes(type)) {
+            return res.status(400).send({ error: "Invalid type" });
+          }
+          if (!category) {
+            return res.status(400).send({ error: "Category is required" });
+          }
+          if (!amount || Number(amount) < 1) {
+            return res.status(400).send({ error: "Amount must be at least 1" });
+          }
+          if (!date) {
+            return res.status(400).send({ error: "Date is required" });
+          }
+          const id = req.params.id;
+          const query = { _id: new ObjectId(id) };
+          const data = {
+            type,
+            category,
+            amount: Number(amount),
+            description: description || "",
+            date: new Date(date),
+            email,
+            name: name || "",
+          };
+          console.log(data);
+
+          const result = await costsCollection.updateOne(query, { $set: data });
+
+          res.send({
+            success: true,
+            insertedId: result.insertedId,
+            message: "Transaction updated successfully!",
+          });
+        } catch (error) {
+          console.log(error);
+
+          res.status(500).send({ error: "Internal server error" });
+        }
+      }
+    );
+
     app.get("/balance", verifyFirebaseToken, async (req, res) => {
       const email = req.user.email;
       const user = await usersCollection.findOne({ email });
@@ -133,7 +182,20 @@ async function run() {
 
     app.get("/my-transactions", verifyFirebaseToken, async (req, res) => {
       const email = req.user.email;
-      const userTransactions = await costsCollection.find({ email }).toArray();
+      const userTransactions = await costsCollection
+        .find({ email })
+        .sort({ date: 1 })
+        .toArray();
+      res.send(userTransactions);
+    });
+
+    app.get("/my-transactions/:id", verifyFirebaseToken, async (req, res) => {
+      const email = req.user.email;
+      const id = req.params.id;
+      const userTransactions = await costsCollection.findOne({
+        email,
+        _id: new ObjectId(id),
+      });
       res.send(userTransactions);
     });
 
