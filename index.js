@@ -6,7 +6,11 @@ const cors = require("cors");
 require("dotenv").config();
 const port = process.env.PORT || 3000;
 
-const serviceAccount = require("./fintrack_firebasesdk.json");
+const decoded = Buffer.from(
+  process.env.FIREBASE_SERVICE_KEY,
+  "base64"
+).toString("utf8");
+const serviceAccount = JSON.parse(decoded);
 const { default: axios } = require("axios");
 
 admin.initializeApp({
