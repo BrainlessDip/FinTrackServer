@@ -54,24 +54,7 @@ async function run() {
   try {
     await client.connect();
     const db = client.db("fintrack_db");
-    const usersCollection = db.collection("users");
     const costsCollection = db.collection("costs");
-
-    app.post("/check", async (req, res) => {
-      const { email } = req.body;
-      const isAlready = await usersCollection.findOne({ email });
-      if (isAlready) {
-        res.status(200).send({ message: "User already exists" });
-      } else {
-        await usersCollection.insertOne({
-          balance: 0,
-          income: 0,
-          expense: 0,
-          email,
-        });
-        res.status(201).send({ message: "User added successfully" });
-      }
-    });
 
     app.post("/add-transaction", verifyFirebaseToken, async (req, res) => {
       try {
@@ -98,20 +81,12 @@ async function run() {
           amount: Number(amount),
           description: description || "",
           date: new Date(date),
+          createdAt: new Date(),
           email,
           name: name || "",
         };
 
         const result = await costsCollection.insertOne(data);
-        await usersCollection.updateOne(
-          { email },
-          {
-            $inc: {
-              [type]: Number(amount),
-              balance: type === "income" ? Number(amount) : -Number(amount),
-            },
-          }
-        );
 
         res.send({
           success: true,
@@ -125,103 +100,126 @@ async function run() {
       }
     });
 
-    app.patch(
-      "/update-transaction/:id",
-      verifyFirebaseToken,
-      async (req, res) => {
-        try {
-          const { type, category, amount, description, date } = req.body;
-          const email = req.user.email;
-          const name = req.user.name;
+    app.patch("/transaction/:id", verifyFirebaseToken, async (req, res) => {
+      try {
+        const { type, category, amount, description, date } = req.body;
+        const email = req.user.email;
+        const name = req.user.name;
 
-          if (!type || !["income", "expense"].includes(type)) {
-            return res.status(400).send({ error: "Invalid type" });
-          }
-          if (!category) {
-            return res.status(400).send({ error: "Category is required" });
-          }
-          if (!amount || Number(amount) < 1) {
-            return res.status(400).send({ error: "Amount must be at least 1" });
-          }
-          if (!date) {
-            return res.status(400).send({ error: "Date is required" });
-          }
-          const id = req.params.id;
-          const query = { _id: new ObjectId(id) };
-          const data = {
-            type,
-            category,
-            amount: Number(amount),
-            description: description || "",
-            date: new Date(date),
-            email,
-            name: name || "",
-          };
-          console.log(data);
-
-          const result = await costsCollection.updateOne(query, { $set: data });
-
-          res.send({
-            success: true,
-            insertedId: result.insertedId,
-            message: "Transaction updated successfully!",
-          });
-        } catch (error) {
-          console.log(error);
-
-          res.status(500).send({ error: "Internal server error" });
+        if (!type || !["income", "expense"].includes(type)) {
+          return res.status(400).send({ error: "Invalid type" });
         }
+        if (!category) {
+          return res.status(400).send({ error: "Category is required" });
+        }
+        if (!amount || Number(amount) < 1) {
+          return res.status(400).send({ error: "Amount must be at least 1" });
+        }
+        if (!date) {
+          return res.status(400).send({ error: "Date is required" });
+        }
+        const id = req.params.id;
+        const query = { _id: new ObjectId(id) };
+        const data = {
+          type,
+          category,
+          amount: Number(amount),
+          description: description || "",
+          date: new Date(date),
+          email,
+          name: name || "",
+        };
+        console.log(data);
+
+        const result = await costsCollection.updateOne(query, { $set: data });
+
+        res.send({
+          success: true,
+          insertedId: result.insertedId,
+          message: "Transaction updated successfully!",
+        });
+      } catch (error) {
+        console.log(error);
+
+        res.status(500).send({ error: "Internal server error" });
       }
-    );
+    });
 
     app.get("/balance", verifyFirebaseToken, async (req, res) => {
       const email = req.user.email;
-      const user = await usersCollection.findOne({ email });
-      res.send(user);
+      const txns = await costsCollection.find({ email }).toArray();
+      let incomeTotal = 0;
+      let expenseTotal = 0;
+
+      txns
+        .filter((txn) => txn.type === "income")
+        .forEach((x) => {
+          incomeTotal += x.amount;
+        });
+      txns
+        .filter((txn) => txn.type === "expense")
+        .forEach((x) => {
+          expenseTotal += x.amount;
+        });
+
+      res.send({
+        balance: incomeTotal - expenseTotal,
+        income: incomeTotal,
+        expense: expenseTotal,
+      });
     });
 
     app.get("/my-transactions", verifyFirebaseToken, async (req, res) => {
       const email = req.user.email;
       const userTransactions = await costsCollection
         .find({ email })
-        .sort({ date: 1 })
+        .sort({ createdAt: -1 })
         .toArray();
       res.send(userTransactions);
     });
 
-    app.get("/my-transactions/:id", verifyFirebaseToken, async (req, res) => {
+    app.get("/transaction/:id", verifyFirebaseToken, async (req, res) => {
       const email = req.user.email;
       const id = req.params.id;
-      const userTransactions = await costsCollection.findOne({
+      const transaction = await costsCollection.findOne({
         email,
         _id: new ObjectId(id),
       });
-      res.send(userTransactions);
+      const categoryTotalArr = await costsCollection
+        .find({
+          email,
+          category: transaction.category,
+        })
+        .toArray();
+      let category_total = 0;
+      categoryTotalArr
+        .map((x) => x.amount)
+        .forEach((y) => {
+          category_total += y;
+        });
+
+      res.send({ ...transaction, category_total });
     });
 
-    app.delete(
-      "/my-transactions/:id",
-      verifyFirebaseToken,
-      async (req, res) => {
-        const email = req.user.email;
-        const id = req.params.id;
-        const transaction = await costsCollection.deleteOne({
-          email,
-          _id: new ObjectId(id),
+    app.delete("/transaction/:id", verifyFirebaseToken, async (req, res) => {
+      const email = req.user.email;
+      const id = req.params.id;
+      const transaction = await costsCollection.deleteOne({
+        email,
+        _id: new ObjectId(id),
+      });
+      if (transaction.deletedCount > 0) {
+        return res.status(200).send({
+          success: true,
+          message: "Transaction deleted successfully.",
         });
-        if (transaction.deletedCount > 0) {
-          return res.status(200).send({
-            success: true,
-            message: "Transaction deleted successfully.",
-          });
-        } else {
-          return res.status(404).send({
-            success: false,
-            message: "Transaction not found",
-          });
-        }
+      } else {
+        return res.status(404).send({
+          success: false,
+          message: "Transaction not found",
+        });
       }
-    );
+    });
 
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!"
