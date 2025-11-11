@@ -94,8 +94,6 @@ async function run() {
           message: "Transaction added successfully!",
         });
       } catch (error) {
-        console.log(error);
-
         res.status(500).send({ error: "Internal server error" });
       }
     });
@@ -129,8 +127,6 @@ async function run() {
           email,
           name: name || "",
         };
-        console.log(data);
-
         const result = await costsCollection.updateOne(query, { $set: data });
 
         res.send({
@@ -139,8 +135,6 @@ async function run() {
           message: "Transaction updated successfully!",
         });
       } catch (error) {
-        console.log(error);
-
         res.status(500).send({ error: "Internal server error" });
       }
     });
@@ -220,10 +214,6 @@ async function run() {
         });
       }
     });
-
-    console.log(
-      "Pinged your deployment. You successfully connected to MongoDB!"
-    );
   } finally {
     // await client.close();
   }
@@ -255,5 +245,5 @@ app.get("/quote", async (req, res) => {
 });
 
 app.listen(port, () => {
-  console.log(`Example app listening on port ${port}`);
+  console.log(`Fin Track listening on port ${port}`);
 });
